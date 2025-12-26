@@ -1,0 +1,124 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Distribution and packaging
+build/
+dist/
+*.egg
+*.egg-info/
+*.eggs/
+*.whl
+*.manifest
+*.spec
+MANIFEST
+pip-wheel-metadata/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+.python-version
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+.DS_Store?
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Environment and secrets
+.env
+.env.*
+*.env
+!.env.example
+secrets.*
+config.local.*
+*.local.py
+*.local.json
+*.local.yaml
+*.local.yml
+
+# API keys and credentials (pattern match)
+*key*.txt
+*secret*.txt
+*credential*.txt
+*token*.txt
+*key*.json
+*secret*.json
+*credential*.json
+*token*.json
+*apikey*
+*api_key*
+*api-key*
+
+# Logs
+*.log
+logs/
+log/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Test coverage and profiling
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+*.py,cover
+.pytest_cache/
+.tox/
+.nox/
+nosetests.xml
+.hypothesis/
+
+# Profiling
+*.prof
+*.lprof
+profile_output/
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# mypy and type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# Ruff and linting
+.ruff_cache/
+
+# Documentation builds
+docs/_build/
+site/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+
+# Claude Code local settings
+.claude/settings.local.json
