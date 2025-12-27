@@ -69,7 +69,8 @@ class EngineConfig(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
     openrouter_api_key: Optional[str] = None
-    triage_model: str = "anthropic/claude-sonnet-4-20250514"
+    # Override only if you need a specific model for triage; otherwise let OpenRouter select
+    triage_model: str = "openrouter/auto"
     default_model: str = "openrouter/auto"
     observability: bool = False
     delta_strategy: Optional[Any] = None  # Defaults to LLMJudgeDeltaStrategy
