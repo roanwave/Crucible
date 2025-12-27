@@ -2,9 +2,12 @@
 
 import os
 from enum import Enum
-from typing import Any, Optional, Protocol
+from typing import TYPE_CHECKING, Any, Optional, Protocol
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
+
+if TYPE_CHECKING:
+    from crucible.schemas import CouncilSeat
 
 
 class ComplexityDomain(str, Enum):
@@ -43,6 +46,13 @@ class CouncilRole(str, Enum):
     RED_TEAM = "red_team"
 
 
+class RoutingMode(str, Enum):
+    """Router selection mode for Crucible engine."""
+
+    AUTO = "auto"
+    CUSTOM = "custom"
+
+
 class DeltaStrategy(Protocol):
     """Protocol for delta detection strategies."""
 
@@ -63,6 +73,41 @@ class DeltaStrategy(Protocol):
         ...
 
 
+class Router(Protocol):
+    """Protocol for pluggable model selection at call time.
+
+    Implementations must:
+    - Return a valid OpenRouter model ID string
+    - Be callable at inference time (each council call)
+    - Fall back gracefully; caller will use openrouter/auto on failure
+    - Account for existing_selections to enforce diversity
+    """
+
+    def select_model(
+        self,
+        role: "CouncilRole",
+        loop: int,
+        seat_index: int,
+        existing_selections: list[str],
+    ) -> str:
+        """Select a model for this council seat.
+
+        Args:
+            role: Council role (DOMAIN_EXPERT, RED_TEAM, SYNTHESIZER, etc.)
+            loop: Current loop number (0-indexed)
+            seat_index: Index of this seat within loop (0-indexed)
+            existing_selections: Models already selected in this loop
+
+        Returns:
+            OpenRouter model ID (e.g., "anthropic/claude-opus-4")
+            If selection fails, return "openrouter/auto".
+
+        Raises:
+            Should not raise; return fallback if logic fails.
+        """
+        ...
+
+
 class EngineConfig(BaseModel):
     """Configuration for the Crucible engine."""
 
@@ -74,6 +119,20 @@ class EngineConfig(BaseModel):
     default_model: str = "openrouter/auto"
     observability: bool = False
     delta_strategy: Optional[Any] = None  # Defaults to LLMJudgeDeltaStrategy
+
+    # Router configuration
+    routing_mode: RoutingMode = Field(
+        default=RoutingMode.AUTO,
+        description="Router selection mode: AUTO (openrouter/auto) or CUSTOM",
+    )
+    custom_router: Optional[Any] = Field(
+        default=None,
+        description="Custom Router implementation. Required if routing_mode is CUSTOM.",
+    )
+    router_config: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Configuration dict for routers (role pools, vendor caps, etc.)",
+    )
 
     @model_validator(mode="after")
     def resolve_api_key(self) -> "EngineConfig":
@@ -87,3 +146,10 @@ class EngineConfig(BaseModel):
         raise ValueError(
             "openrouter_api_key must be provided or OPENROUTER_KEY environment variable must be set"
         )
+
+    @model_validator(mode="after")
+    def validate_custom_router(self) -> "EngineConfig":
+        """Validate that custom_router is provided when routing_mode is CUSTOM."""
+        if self.routing_mode == RoutingMode.CUSTOM and self.custom_router is None:
+            raise ValueError("custom_router required when routing_mode is CUSTOM")
+        return self

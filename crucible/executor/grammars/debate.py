@@ -4,6 +4,7 @@ import asyncio
 from typing import Optional
 
 from crucible.config import CouncilRole, DeltaStrategy, EngineConfig, RedTeamFlavor
+from crucible.executor.routing_helper import select_model_for_red_team, select_model_for_seat
 from crucible.openrouter.client import OpenRouterClient
 from crucible.red_team.prompts import get_red_team_prompt
 from crucible.schemas import CouncilSeat, LoopRecord
@@ -51,8 +52,13 @@ async def execute_debate_loop(
     """
     red_team_prompt = get_red_team_prompt(red_team_flavor)
 
+    # Track models selected in this loop for diversity enforcement
+    loop_selections: list[str] = []
+
     # Phase 1: All seats state positions (parallel)
-    async def state_position(seat: CouncilSeat) -> tuple[CouncilRole, str, str]:
+    async def state_position(
+        seat: CouncilSeat, seat_idx: int, selections_snapshot: list[str]
+    ) -> tuple[CouncilRole, str, str]:
         messages = [
             {"role": "system", "content": seat.system_prompt},
             {
@@ -63,15 +69,28 @@ async def execute_debate_loop(
                 ),
             },
         ]
-        model = seat.model_hint or config.default_model
+        model = select_model_for_seat(
+            seat=seat,
+            config=config,
+            loop=loop_number - 1,  # Convert to 0-indexed for router
+            seat_index=seat_idx,
+            existing_selections=selections_snapshot,
+        )
         llm_response = await client.call(messages, model=model)
         return seat.role, llm_response.content, llm_response.model_used
 
-    position_tasks = [state_position(seat) for seat in deliberating_seats]
+    # For parallel calls, we pass the same empty snapshot to all seats
+    position_tasks = [
+        state_position(seat, idx, loop_selections.copy())
+        for idx, seat in enumerate(deliberating_seats)
+    ]
     position_results = await asyncio.gather(*position_tasks)
     initial_positions = {role: content for role, content, _ in position_results}
     # Track models from initial positions (will be updated with defense models)
     initial_models = {role: model for role, _, model in position_results}
+
+    # Update loop_selections with position phase models
+    loop_selections.extend(initial_models.values())
 
     # Phase 2: Red Team attacks weakest position(s)
     positions_summary = _format_positions_summary(initial_positions)
@@ -87,10 +106,18 @@ async def execute_debate_loop(
             ),
         },
     ]
-    red_team_response = await client.call(attack_messages, model=config.default_model)
+    red_team_model = select_model_for_red_team(
+        config=config,
+        loop=loop_number - 1,
+        existing_selections=loop_selections,
+    )
+    red_team_response = await client.call(attack_messages, model=red_team_model)
+    loop_selections.append(red_team_response.model_used)
 
     # Phase 3: All seats defend (they see their position + attack)
-    async def defend_position(seat: CouncilSeat) -> tuple[CouncilRole, str, str]:
+    async def defend_position(
+        seat: CouncilSeat, seat_idx: int, selections_snapshot: list[str]
+    ) -> tuple[CouncilRole, str, str]:
         prior_position = initial_positions.get(seat.role, "")
         messages = [
             {"role": "system", "content": seat.system_prompt},
@@ -105,11 +132,21 @@ async def execute_debate_loop(
                 ),
             },
         ]
-        model = seat.model_hint or config.default_model
+        model = select_model_for_seat(
+            seat=seat,
+            config=config,
+            loop=loop_number - 1,
+            seat_index=seat_idx,
+            existing_selections=selections_snapshot,
+        )
         llm_response = await client.call(messages, model=model)
         return seat.role, llm_response.content, llm_response.model_used
 
-    defense_tasks = [defend_position(seat) for seat in deliberating_seats]
+    # For parallel calls, we pass current snapshot to all seats
+    defense_tasks = [
+        defend_position(seat, idx, loop_selections.copy())
+        for idx, seat in enumerate(deliberating_seats)
+    ]
     defense_results = await asyncio.gather(*defense_tasks)
     final_responses = {role: content for role, content, _ in defense_results}
     # Use defense phase models (the final response models)

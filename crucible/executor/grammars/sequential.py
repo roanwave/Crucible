@@ -3,6 +3,7 @@
 from typing import Optional
 
 from crucible.config import CouncilRole, DeltaStrategy, EngineConfig, RedTeamFlavor
+from crucible.executor.routing_helper import select_model_for_red_team, select_model_for_seat
 from crucible.openrouter.client import OpenRouterClient
 from crucible.red_team.prompts import get_red_team_prompt
 from crucible.schemas import CouncilSeat, LoopRecord
@@ -47,6 +48,9 @@ async def execute_sequential_loop(
     accumulated_draft = ""
     running_critiques: list[str] = []
 
+    # Track models selected in this loop for diversity enforcement
+    loop_selections: list[str] = []
+
     for i, seat in enumerate(deliberating_seats):
         is_first = i == 0
         is_last = i == len(deliberating_seats) - 1
@@ -75,10 +79,17 @@ async def execute_sequential_loop(
                 ),
             })
 
-        model = seat.model_hint or config.default_model
+        model = select_model_for_seat(
+            seat=seat,
+            config=config,
+            loop=loop_number - 1,  # Convert to 0-indexed for router
+            seat_index=i,
+            existing_selections=loop_selections,
+        )
         llm_response = await client.call(messages, model=model)
         council_responses[seat.role] = llm_response.content
         models_used[seat.role] = llm_response.model_used
+        loop_selections.append(llm_response.model_used)
         accumulated_draft = llm_response.content  # Latest draft becomes the accumulated one
 
         # Red Team attacks after each seat except the last
@@ -94,8 +105,14 @@ async def execute_sequential_loop(
                     ),
                 },
             ]
-            critique_response = await client.call(critique_messages, model=config.default_model)
+            red_team_model = select_model_for_red_team(
+                config=config,
+                loop=loop_number - 1,
+                existing_selections=loop_selections,
+            )
+            critique_response = await client.call(critique_messages, model=red_team_model)
             running_critiques.append(critique_response.content)
+            loop_selections.append(critique_response.model_used)
 
     # Final Red Team critique of complete output
     final_critique_messages = [
@@ -109,7 +126,12 @@ async def execute_sequential_loop(
             ),
         },
     ]
-    final_response = await client.call(final_critique_messages, model=config.default_model)
+    final_red_team_model = select_model_for_red_team(
+        config=config,
+        loop=loop_number - 1,
+        existing_selections=loop_selections,
+    )
+    final_response = await client.call(final_critique_messages, model=final_red_team_model)
 
     # Delta detection
     delta_detected = True

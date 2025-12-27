@@ -6,7 +6,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Crucible is a **modular, plug-n-play Council Engine**: a reusable library that orchestrates structured, adversarial, multi-LLM deliberation. It is a drop-in module, not an app or framework.
 
-**Status**: Design frozen. Implementation pending.
+**Status**: Implementation complete. Design frozen.
+
+## Development Commands
+
+```bash
+# Environment setup
+cp .env.example .env      # Then add your OPENROUTER_KEY
+
+# Run the CLI (interactive testing)
+python -m crucible
+
+# Run with verbose output (shows triage config, loop details, models used)
+# Set observability=True in the CLI when prompted, or toggle with 'trace on'
+
+# Run tests
+pytest tests/
+```
 
 ## Architecture
 
@@ -31,48 +47,6 @@ Crucible.run(query) → Triage Agent → TriageOutput → Executor → Synthesis
 5. Synthesis produces unified response (no mention of internal process)
 6. Returns `ExecutorResult`
 
-## Project Structure
-
-```
-crucible/
-├── __init__.py          # Public exports: Crucible, EngineConfig, ExecutorResult
-├── engine.py            # Crucible public adapter
-├── config.py            # EngineConfig, enums
-├── schemas.py           # TriageOutput, ExecutorResult, LoopRecord, CouncilSeat
-├── triage/
-│   ├── agent.py         # Triage agent (LLM call → TriageOutput)
-│   └── prompts.py       # Triage system prompt
-├── executor/
-│   ├── executor.py      # Main orchestrator
-│   ├── grammars/
-│   │   ├── parallel.py  # All seats respond simultaneously
-│   │   ├── sequential.py # Iterative draft refinement
-│   │   └── debate.py    # Position → attack → defend
-│   ├── delta.py         # Convergence detection strategies
-│   └── synthesis.py     # Final response generation
-├── red_team/
-│   └── prompts.py       # Base frame + 4 flavors (LOGICAL/FEASIBILITY/ETHICAL/STEELMAN)
-├── openrouter/
-│   └── client.py        # HTTP client with retry/fallback
-└── cli.py               # Temporary testing interface (disposable)
-```
-
-## Implementation Order
-
-Follow this sequence—each step depends on prior steps:
-
-1. `schemas.py`, `config.py` — Data structures with Pydantic validation
-2. `openrouter/client.py` — Async HTTP transport
-3. `red_team/prompts.py` — Static prompt templates
-4. `triage/` — Agent that emits TriageOutput
-5. `executor/delta.py` — LLMJudgeDeltaStrategy (pluggable)
-6. `executor/grammars/parallel.py` — First grammar
-7. `executor/grammars/sequential.py`, `debate.py` — Remaining grammars
-8. `executor/synthesis.py` — Final response
-9. `executor/executor.py` — Loop orchestration
-10. `engine.py` — Public adapter
-11. `cli.py` — Last, minimal
-
 ## Key Constraints
 
 **Council Configuration**:
@@ -91,9 +65,59 @@ Follow this sequence—each step depends on prior steps:
 - Only `Crucible`, `EngineConfig`, `ExecutorResult` are public exports
 - Internal components must not be importable from package root
 
+## Usage Example
+
+```python
+from crucible import Crucible, EngineConfig
+
+engine = Crucible(
+    config=EngineConfig(
+        openrouter_api_key="sk-or-...",  # or set OPENROUTER_KEY env var
+        observability=True  # enables reasoning_trace in result
+    )
+)
+
+result = await engine.run("Should we migrate to microservices?")
+print(result.final_response)
+
+# Sync version available
+result = engine.run_sync("What's the capital of France?")
+```
+
+## Custom Routing
+
+Crucible supports pluggable model selection via the `Router` protocol:
+
+```python
+from crucible import Crucible, EngineConfig
+from crucible.config import RoutingMode
+from crucible.routing import RoleSpecializedRouter, DEFAULT_ROLE_POOLS
+
+# Use custom router with role-based model pools
+router = RoleSpecializedRouter(
+    role_pools=DEFAULT_ROLE_POOLS,
+    max_per_vendor=2,  # Enforce vendor diversity
+)
+
+engine = Crucible(
+    config=EngineConfig(
+        routing_mode=RoutingMode.CUSTOM,
+        custom_router=router,
+    )
+)
+```
+
+**Built-in Routers** (`crucible.routing`):
+- `PoolRouter`: Random selection from pool
+- `DiversityRouter`: Vendor diversity enforcement
+- `RoleMappedRouter`: Explicit role → model mapping
+- `TieredRouter`: Premium/budget by role importance
+- `RoleSpecializedRouter`: Role pools + diversity (recommended)
+- `CostAwareRouter`: Difficulty-based tier escalation
+
 ## Dependencies
 
-**Required**: `pydantic >= 2.0`, `httpx` or `aiohttp`, Python 3.11+
+**Required**: `pydantic >= 2.0`, `httpx`, Python 3.11+
 
 **Forbidden**: streamlit, gradio, flask, fastapi, django, langchain, llamaindex
 
