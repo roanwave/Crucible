@@ -44,9 +44,9 @@ async def execute_council(
             {"role": "system", "content": triage.synthesis_instruction},
             {"role": "user", "content": triage.reconstructed_query},
         ]
-        response = await client.call(messages, model=config.default_model)
+        llm_response = await client.call(messages, model=config.default_model)
         return ExecutorResult(
-            final_response=response,
+            final_response=llm_response.content,
             loops_executed=0,
             early_exit=True,
             reasoning_trace=None,
@@ -128,12 +128,14 @@ async def execute_council(
     # Build minimal records if we don't have them
     synthesis_records = loop_records if loop_records else []
     if not synthesis_records and prior_responses:
-        # Create a minimal record for synthesis
+        # Create a minimal record for synthesis (models_used unavailable when observability off)
         synthesis_records = [
             LoopRecord(
                 loop_number=loops_executed,
                 council_responses=prior_responses,
+                models_used={},
                 red_team_critique=prior_critique or "",
+                red_team_model="",
                 delta_detected=True,
             )
         ]

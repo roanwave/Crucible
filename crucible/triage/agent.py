@@ -117,12 +117,12 @@ async def run_triage(
     ]
 
     try:
-        response = await client.call(messages, model=config.triage_model)
+        llm_response = await client.call(messages, model=config.triage_model)
     except OpenRouterError as e:
         raise TriageError(f"Triage LLM call failed: {e}") from e
 
     # Parse JSON response
-    data = _parse_json_response(response)
+    data = _parse_json_response(llm_response.content)
 
     # Parse into TriageOutput (Pydantic validates field types and constraints)
     try:

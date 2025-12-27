@@ -52,7 +52,9 @@ class LoopRecord(BaseModel):
 
     loop_number: int
     council_responses: dict[CouncilRole, str]
+    models_used: dict[CouncilRole, str]
     red_team_critique: str
+    red_team_model: str
     delta_detected: bool
 
 

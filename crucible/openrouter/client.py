@@ -1,11 +1,20 @@
 """OpenRouter HTTP client (transport only)."""
 
 import asyncio
+from dataclasses import dataclass
 from typing import Optional
 
 import httpx
 
 from crucible.config import EngineConfig
+
+
+@dataclass(frozen=True)
+class LLMResponse:
+    """Response from an LLM call."""
+
+    content: str
+    model_used: str
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 MAX_RETRIES = 3
@@ -48,7 +57,7 @@ class OpenRouterClient:
         self,
         messages: list[dict],
         model: Optional[str] = None,
-    ) -> str:
+    ) -> LLMResponse:
         """Make a chat completion request to OpenRouter.
 
         Args:
@@ -56,7 +65,7 @@ class OpenRouterClient:
             model: Model ID to use, or None for default
 
         Returns:
-            The assistant's response content
+            LLMResponse with content and actual model used
 
         Raises:
             OpenRouterError: On API errors after retries exhausted
@@ -86,7 +95,9 @@ class OpenRouterClient:
 
                 if response.status_code == 200:
                     data = response.json()
-                    return data["choices"][0]["message"]["content"]
+                    content = data["choices"][0]["message"]["content"]
+                    model_used = data.get("model", resolved_model)
+                    return LLMResponse(content=content, model_used=model_used)
 
                 # Rate limit or server error - retry
                 if response.status_code in (429, 500, 502, 503, 504):

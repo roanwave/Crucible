@@ -43,6 +43,7 @@ async def execute_sequential_loop(
     """
     red_team_prompt = get_red_team_prompt(red_team_flavor)
     council_responses: dict[CouncilRole, str] = {}
+    models_used: dict[CouncilRole, str] = {}
     accumulated_draft = ""
     running_critiques: list[str] = []
 
@@ -75,9 +76,10 @@ async def execute_sequential_loop(
             })
 
         model = seat.model_hint or config.default_model
-        response = await client.call(messages, model=model)
-        council_responses[seat.role] = response
-        accumulated_draft = response  # Latest draft becomes the accumulated one
+        llm_response = await client.call(messages, model=model)
+        council_responses[seat.role] = llm_response.content
+        models_used[seat.role] = llm_response.model_used
+        accumulated_draft = llm_response.content  # Latest draft becomes the accumulated one
 
         # Red Team attacks after each seat except the last
         if not is_last:
@@ -87,13 +89,13 @@ async def execute_sequential_loop(
                     "role": "user",
                     "content": (
                         f"QUERY: {query}\n\n"
-                        f"CURRENT DRAFT from [{seat.role.value.upper()}]:\n{response}\n\n"
+                        f"CURRENT DRAFT from [{seat.role.value.upper()}]:\n{llm_response.content}\n\n"
                         "Critique this draft."
                     ),
                 },
             ]
-            critique = await client.call(critique_messages, model=config.default_model)
-            running_critiques.append(critique)
+            critique_response = await client.call(critique_messages, model=config.default_model)
+            running_critiques.append(critique_response.content)
 
     # Final Red Team critique of complete output
     final_critique_messages = [
@@ -107,7 +109,7 @@ async def execute_sequential_loop(
             ),
         },
     ]
-    final_critique = await client.call(final_critique_messages, model=config.default_model)
+    final_response = await client.call(final_critique_messages, model=config.default_model)
 
     # Delta detection
     delta_detected = True
@@ -119,6 +121,8 @@ async def execute_sequential_loop(
     return LoopRecord(
         loop_number=loop_number,
         council_responses=council_responses,
-        red_team_critique=final_critique,
+        models_used=models_used,
+        red_team_critique=final_response.content,
+        red_team_model=final_response.model_used,
         delta_detected=delta_detected,
     )

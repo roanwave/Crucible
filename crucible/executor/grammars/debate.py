@@ -52,7 +52,7 @@ async def execute_debate_loop(
     red_team_prompt = get_red_team_prompt(red_team_flavor)
 
     # Phase 1: All seats state positions (parallel)
-    async def state_position(seat: CouncilSeat) -> tuple[CouncilRole, str]:
+    async def state_position(seat: CouncilSeat) -> tuple[CouncilRole, str, str]:
         messages = [
             {"role": "system", "content": seat.system_prompt},
             {
@@ -64,12 +64,14 @@ async def execute_debate_loop(
             },
         ]
         model = seat.model_hint or config.default_model
-        response = await client.call(messages, model=model)
-        return seat.role, response
+        llm_response = await client.call(messages, model=model)
+        return seat.role, llm_response.content, llm_response.model_used
 
     position_tasks = [state_position(seat) for seat in deliberating_seats]
     position_results = await asyncio.gather(*position_tasks)
-    initial_positions = dict(position_results)
+    initial_positions = {role: content for role, content, _ in position_results}
+    # Track models from initial positions (will be updated with defense models)
+    initial_models = {role: model for role, _, model in position_results}
 
     # Phase 2: Red Team attacks weakest position(s)
     positions_summary = _format_positions_summary(initial_positions)
@@ -85,10 +87,10 @@ async def execute_debate_loop(
             ),
         },
     ]
-    red_team_attack = await client.call(attack_messages, model=config.default_model)
+    red_team_response = await client.call(attack_messages, model=config.default_model)
 
     # Phase 3: All seats defend (they see their position + attack)
-    async def defend_position(seat: CouncilSeat) -> tuple[CouncilRole, str]:
+    async def defend_position(seat: CouncilSeat) -> tuple[CouncilRole, str, str]:
         prior_position = initial_positions.get(seat.role, "")
         messages = [
             {"role": "system", "content": seat.system_prompt},
@@ -96,7 +98,7 @@ async def execute_debate_loop(
                 "role": "user",
                 "content": (
                     f"YOUR PRIOR POSITION:\n{prior_position}\n\n"
-                    f"RED TEAM ATTACK:\n{red_team_attack}\n\n"
+                    f"RED TEAM ATTACK:\n{red_team_response.content}\n\n"
                     "Defend your position against this attack. "
                     "You may revise your position if the critique is valid, "
                     "or reinforce it if you can refute the objections."
@@ -104,12 +106,14 @@ async def execute_debate_loop(
             },
         ]
         model = seat.model_hint or config.default_model
-        response = await client.call(messages, model=model)
-        return seat.role, response
+        llm_response = await client.call(messages, model=model)
+        return seat.role, llm_response.content, llm_response.model_used
 
     defense_tasks = [defend_position(seat) for seat in deliberating_seats]
     defense_results = await asyncio.gather(*defense_tasks)
-    final_responses = dict(defense_results)
+    final_responses = {role: content for role, content, _ in defense_results}
+    # Use defense phase models (the final response models)
+    models_used = {role: model for role, _, model in defense_results}
 
     # Delta detection (compare initial to final, or prior loop to this loop)
     delta_detected = True
@@ -121,6 +125,8 @@ async def execute_debate_loop(
     return LoopRecord(
         loop_number=loop_number,
         council_responses=final_responses,
-        red_team_critique=red_team_attack,
+        models_used=models_used,
+        red_team_critique=red_team_response.content,
+        red_team_model=red_team_response.model_used,
         delta_detected=delta_detected,
     )

@@ -52,7 +52,7 @@ async def execute_parallel_loop(
         LoopRecord with council_responses, red_team_critique, delta_detected
     """
     # Build messages for deliberating seats
-    async def call_seat(seat: CouncilSeat) -> tuple[CouncilRole, str]:
+    async def call_seat(seat: CouncilSeat) -> tuple[CouncilRole, str, str]:
         messages = [{"role": "system", "content": seat.system_prompt}]
 
         if loop_number == 1:
@@ -73,13 +73,14 @@ async def execute_parallel_loop(
             })
 
         model = seat.model_hint or config.default_model
-        response = await client.call(messages, model=model)
-        return seat.role, response
+        llm_response = await client.call(messages, model=model)
+        return seat.role, llm_response.content, llm_response.model_used
 
     # Call all deliberating seats in parallel
     tasks = [call_seat(seat) for seat in deliberating_seats]
     results = await asyncio.gather(*tasks)
-    council_responses = dict(results)
+    council_responses = {role: content for role, content, _ in results}
+    models_used = {role: model for role, _, model in results}
 
     # Red Team critique
     red_team_prompt = get_red_team_prompt(red_team_flavor)
@@ -97,7 +98,7 @@ async def execute_parallel_loop(
         },
     ]
 
-    red_team_critique = await client.call(red_team_messages, model=config.default_model)
+    red_team_response = await client.call(red_team_messages, model=config.default_model)
 
     # Delta detection
     delta_detected = True
@@ -109,6 +110,8 @@ async def execute_parallel_loop(
     return LoopRecord(
         loop_number=loop_number,
         council_responses=council_responses,
-        red_team_critique=red_team_critique,
+        models_used=models_used,
+        red_team_critique=red_team_response.content,
+        red_team_model=red_team_response.model_used,
         delta_detected=delta_detected,
     )

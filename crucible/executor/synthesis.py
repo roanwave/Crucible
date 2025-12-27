@@ -78,4 +78,5 @@ SYNTHESIS INSTRUCTION:
 Produce the final response. Do not mention the council, the deliberation process, or that multiple perspectives were consulted. Speak directly to the user as a unified voice."""
 
     messages = [{"role": "user", "content": synthesis_prompt}]
-    return await client.call(messages, model=config.default_model)
+    response = await client.call(messages, model=config.default_model)
+    return response.content

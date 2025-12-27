@@ -65,5 +65,5 @@ class LLMJudgeDeltaStrategy:
             },
         ]
 
-        judgment = await self._client.call(messages, model="openrouter/auto")
-        return "YES" in judgment.upper()
+        response = await self._client.call(messages, model="openrouter/auto")
+        return "YES" in response.content.upper()

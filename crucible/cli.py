@@ -45,6 +45,16 @@ def _print_triage(result: ExecutorResult) -> None:
     print()
 
 
+def _format_model_name(model: str) -> str:
+    """Format model name for display (extract provider/model from full ID)."""
+    # Model IDs are like "anthropic/claude-3-opus-20240229" or "openai/gpt-4"
+    # Show just the last part for brevity
+    parts = model.split("/")
+    if len(parts) >= 2:
+        return f"{parts[0]}/{parts[-1]}"
+    return model
+
+
 def _print_loop_records(result: ExecutorResult) -> None:
     """Print deliberation loop details."""
     if not result.reasoning_trace:
@@ -55,14 +65,17 @@ def _print_loop_records(result: ExecutorResult) -> None:
         print(f"LOOP {record.loop_number}")
         print("-" * 60)
 
-        # Council responses
+        # Council responses with models
         for role, response in record.council_responses.items():
-            print(f"[{role.value.upper()}]")
+            model = record.models_used.get(role, "unknown")
+            model_display = _format_model_name(model)
+            print(f"[{role.value.upper()}] ({model_display})")
             print(f"  {_truncate(response)}")
             print()
 
-        # Red Team critique
-        print("[RED TEAM CRITIQUE]")
+        # Red Team critique with model
+        red_model_display = _format_model_name(record.red_team_model)
+        print(f"[RED TEAM CRITIQUE] ({red_model_display})")
         print(f"  {_truncate(record.red_team_critique)}")
         print()
 
