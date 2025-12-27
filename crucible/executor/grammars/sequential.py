@@ -2,8 +2,7 @@
 
 from typing import Optional
 
-from crucible.config import CouncilRole, EngineConfig, RedTeamFlavor
-from crucible.executor.delta import LLMJudgeDeltaStrategy
+from crucible.config import CouncilRole, DeltaStrategy, EngineConfig, RedTeamFlavor
 from crucible.openrouter.client import OpenRouterClient
 from crucible.red_team.prompts import get_red_team_prompt
 from crucible.schemas import CouncilSeat, LoopRecord
@@ -17,7 +16,7 @@ async def execute_sequential_loop(
     client: OpenRouterClient,
     config: EngineConfig,
     prior_responses: Optional[dict[CouncilRole, str]] = None,
-    delta_strategy: Optional[LLMJudgeDeltaStrategy] = None,
+    delta_strategy: Optional[DeltaStrategy] = None,
 ) -> LoopRecord:
     """Execute one iteration of the SEQUENTIAL loop grammar.
 

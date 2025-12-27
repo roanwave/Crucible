@@ -3,8 +3,10 @@
 import json
 from typing import Any
 
+from pydantic import ValidationError
+
 from crucible.config import ComplexityDomain, CouncilRole, EngineConfig
-from crucible.openrouter.client import OpenRouterClient
+from crucible.openrouter.client import OpenRouterClient, OpenRouterError
 from crucible.schemas import TriageOutput
 from crucible.triage.prompts import TRIAGE_SYSTEM_PROMPT
 
@@ -116,8 +118,8 @@ async def run_triage(
 
     try:
         response = await client.call(messages, model=config.triage_model)
-    except Exception as e:
-        raise TriageError(f"Triage LLM call failed: {e}")
+    except OpenRouterError as e:
+        raise TriageError(f"Triage LLM call failed: {e}") from e
 
     # Parse JSON response
     data = _parse_json_response(response)
@@ -125,8 +127,8 @@ async def run_triage(
     # Parse into TriageOutput (Pydantic validates field types and constraints)
     try:
         output = TriageOutput.model_validate(data)
-    except Exception as e:
-        raise TriageValidationError(f"Invalid triage output structure: {e}")
+    except ValidationError as e:
+        raise TriageValidationError(f"Invalid triage output structure: {e}") from e
 
     # Additional constraint validation
     _validate_triage_output(output)

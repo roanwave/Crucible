@@ -28,7 +28,7 @@ def _build_deliberation_summary(loop_records: list[LoopRecord]) -> str:
                 section_lines.append(response)
 
         # Red Team critique
-        section_lines.append(f"\n[RED TEAM CRITIQUE]:")
+        section_lines.append("\n[RED TEAM CRITIQUE]:")
         section_lines.append(record.red_team_critique)
 
         sections.append("\n".join(section_lines))

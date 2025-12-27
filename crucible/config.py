@@ -2,12 +2,9 @@
 
 import os
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional, Protocol
+from typing import Any, Optional, Protocol
 
 from pydantic import BaseModel, model_validator
-
-if TYPE_CHECKING:
-    from crucible.schemas import CouncilRole
 
 
 class ComplexityDomain(str, Enum):
