@@ -151,4 +151,5 @@ async def execute_council(
         loops_executed=loops_executed,
         early_exit=early_exit,
         reasoning_trace=loop_records if config.observability else None,
+        triage_output=triage if config.observability else None,
     )

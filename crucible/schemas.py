@@ -63,3 +63,4 @@ class ExecutorResult(BaseModel):
     loops_executed: int
     early_exit: bool
     reasoning_trace: Optional[list[LoopRecord]] = None
+    triage_output: Optional["TriageOutput"] = None

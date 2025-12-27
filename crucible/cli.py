@@ -7,7 +7,84 @@ No persistence, no history, no color, no external dependencies.
 import os
 import sys
 
-from crucible import Crucible, EngineConfig
+from crucible import Crucible, EngineConfig, ExecutorResult
+
+MAX_PREVIEW_LEN = 200
+
+
+def _truncate(text: str, max_len: int = MAX_PREVIEW_LEN) -> str:
+    """Truncate text with ellipsis if too long."""
+    text = text.replace("\n", " ").strip()
+    if len(text) <= max_len:
+        return text
+    return text[:max_len] + "..."
+
+
+def _print_triage(result: ExecutorResult) -> None:
+    """Print triage configuration details."""
+    triage = result.triage_output
+    if not triage:
+        return
+
+    print("=" * 60)
+    print("TRIAGE CONFIGURATION")
+    print("=" * 60)
+    print(f"Complexity:    {triage.complexity.value.upper()}")
+    print(f"Loop Grammar:  {triage.loop_grammar.value.upper()}")
+    print(f"Loop Count:    {triage.loop_count}")
+    print(f"Red Team:      {triage.red_team_flavor.value.upper()}")
+    print(f"Early Exit:    {'allowed' if triage.allow_early_exit else 'disabled'}")
+    print(f"Short-circuit: {'yes' if triage.short_circuit_allowed else 'no'}")
+    print()
+    print("Council Seats:")
+    for seat in triage.council:
+        hint = f" (model: {seat.model_hint})" if seat.model_hint else ""
+        print(f"  - {seat.role.value.upper()}{hint}")
+    print()
+    print(f"Query: {_truncate(triage.reconstructed_query)}")
+    print()
+
+
+def _print_loop_records(result: ExecutorResult) -> None:
+    """Print deliberation loop details."""
+    if not result.reasoning_trace:
+        return
+
+    for record in result.reasoning_trace:
+        print("-" * 60)
+        print(f"LOOP {record.loop_number}")
+        print("-" * 60)
+
+        # Council responses
+        for role, response in record.council_responses.items():
+            print(f"[{role.value.upper()}]")
+            print(f"  {_truncate(response)}")
+            print()
+
+        # Red Team critique
+        print("[RED TEAM CRITIQUE]")
+        print(f"  {_truncate(record.red_team_critique)}")
+        print()
+
+        # Delta status
+        delta_status = "YES - positions changed" if record.delta_detected else "NO - converged"
+        print(f"Delta detected: {delta_status}")
+        print()
+
+
+def _print_summary(result: ExecutorResult) -> None:
+    """Print execution summary."""
+    print("=" * 60)
+    print("EXECUTION SUMMARY")
+    print("=" * 60)
+
+    if result.loops_executed == 0:
+        print("Path: SHORT-CIRCUITED (simple query)")
+    else:
+        exit_type = "EARLY EXIT (converged)" if result.early_exit else "FULL"
+        print(f"Loops executed: {result.loops_executed}")
+        print(f"Exit type: {exit_type}")
+    print()
 
 
 def main() -> None:
@@ -47,7 +124,7 @@ def main() -> None:
             observability = True
             config = EngineConfig(openrouter_api_key=api_key, observability=True)
             engine = Crucible(config=config)
-            print("Observability enabled.")
+            print("Observability enabled. Full deliberation trace will be shown.")
             continue
 
         if user_input.lower() == "trace off":
@@ -61,14 +138,17 @@ def main() -> None:
         try:
             result = engine.run_sync(user_input)
 
-            # Print status if observability enabled
+            # Print detailed trace if observability enabled
             if observability:
-                status = "short-circuited" if result.loops_executed == 0 else f"{result.loops_executed} loops"
-                if result.early_exit and result.loops_executed > 0:
-                    status += " (early exit)"
-                print(f"[{status}]")
                 print()
+                _print_triage(result)
+                _print_loop_records(result)
+                _print_summary(result)
 
+            # Always print final response
+            print("=" * 60)
+            print("FINAL RESPONSE")
+            print("=" * 60)
             print(result.final_response)
             print()
 
