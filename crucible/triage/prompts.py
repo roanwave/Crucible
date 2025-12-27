@@ -78,12 +78,8 @@ Your output must be a single valid JSON object conforming exactly to the TriageO
 - system_prompt for each seat must be specific to the query, not generic
 - model_hint should only be set if you have a strong reason; otherwise null
 
-## Model Hints (use sparingly)
+## Model Hints
 
-Only specify model_hint when the query demands specific capabilities:
-- Long-context analysis: anthropic/claude-sonnet-4-20250514
-- Strong reasoning: anthropic/claude-sonnet-4-20250514, openai/gpt-4o
-- Code-heavy: openai/gpt-4o, anthropic/claude-sonnet-4-20250514
-- Cost-sensitive auxiliary roles: null (let router decide)
+Leave model_hint as null in most cases. OpenRouter will select appropriate models automatically.
 
-When uncertain, leave model_hint null. The executor defaults to openrouter/auto."""
+Only specify model_hint if the role has unusual requirements (e.g., very long context window). When uncertain, use null."""
